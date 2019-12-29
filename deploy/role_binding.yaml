@@ -1,0 +1,11 @@
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: muminio
+subjects:
+- kind: ServiceAccount
+  name: muminio
+roleRef:
+  kind: Role
+  name: muminio
+  apiGroup: rbac.authorization.k8s.io

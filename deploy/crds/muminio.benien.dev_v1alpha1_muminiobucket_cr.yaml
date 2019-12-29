@@ -1,0 +1,7 @@
+apiVersion: muminio.benien.dev/v1alpha1
+kind: MuminioBucket
+metadata:
+  name: example-muminiobucket
+spec:
+  # Add fields here
+  size: 3
