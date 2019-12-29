@@ -10,6 +10,9 @@ COPY _output/bin/muminio ${OPERATOR}
 COPY bin /usr/local/bin
 RUN  /usr/local/bin/user_setup
 
+ENV WATCH_NAMESPACE=""
+ENV OPERATOR_NAME="muminio"
+
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 
 USER ${USER_UID}
