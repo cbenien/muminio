@@ -27,7 +27,9 @@ jobs:
       run: |
         go build -v -o build/_output/bin/muminio cmd/manager/main.go
         docker build build/ -t $DOCKER_USER/muminio-operator:$GITHUB_SHA
+        docker tag $DOCKER_USER/muminio-operator:$GITHUB_SHA $DOCKER_USER/muminio-operator:latest
         docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
         docker push $DOCKER_USER/muminio-operator:$GITHUB_SHA
+        docker push $DOCKER_USER/muminio-operator:latest
 
 
