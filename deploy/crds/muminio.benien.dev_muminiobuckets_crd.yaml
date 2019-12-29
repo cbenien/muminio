@@ -30,9 +30,25 @@ spec:
           type: object
         spec:
           description: MuminioBucketSpec defines the desired state of MuminioBucket
+          properties:
+            name:
+              maxLength: 63
+              minLength: 8
+              type: string
+            secretName:
+              maxLength: 63
+              minLength: 8
+              type: string
           type: object
         status:
           description: MuminioBucketStatus defines the observed state of MuminioBucket
+          properties:
+            minioUrl:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "operator-sdk generate k8s" to regenerate
+                code after modifying this file Add custom validation using kubebuilder
+                tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+              type: string
           type: object
       type: object
   version: v1alpha1

@@ -12,6 +12,13 @@ type MuminioBucketSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+
+    // +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MinLength=8
+	Name string			`json:"name,omitempty"`
+    // +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MinLength=8
+	SecretName string	`json:"secretName,omitempty"`
 }
 
 // MuminioBucketStatus defines the observed state of MuminioBucket
@@ -19,6 +26,7 @@ type MuminioBucketStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+	MinioUrl string		`json:"minioUrl,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

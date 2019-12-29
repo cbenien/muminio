@@ -3,5 +3,5 @@ kind: MuminioBucket
 metadata:
   name: example-muminiobucket
 spec:
-  # Add fields here
-  size: 3
+  name: mybucket
+  secretName: mybucket_secret
