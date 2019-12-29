@@ -2,8 +2,11 @@ package muminiobucket
 
 import (
 	"context"
+	"os"
+	"strings"
 
 	muminiov1alpha1 "github.com/cbenien/muminio/pkg/apis/muminio/v1alpha1"
+	"github.com/minio/minio/pkg/madmin"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -100,54 +103,72 @@ func (r *ReconcileMuminioBucket) Reconcile(request reconcile.Request) (reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Define a new Pod object
-	pod := newPodForCR(instance)
+	minioURL := os.Getenv("MINIO_URL")
+	minioAccessKey := os.Getenv("MINIO_ACCESS_KEY")
+	minioSecretKey := os.Getenv("MINIO_SECRET_KEY")
+	minioSecure := strings.ToLower(os.Getenv("MINIO_SECURE")) == "true"
+
+	accessKey := "newuser"
+	secretKey := "supersecret"
+
+	// Define a new Secret object
+	secret := newSecretForCR(instance, accessKey, secretKey)
 
 	// Set MuminioBucket instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(instance, secret, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Check if this Pod already exists
-	found := &corev1.Pod{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
+	// Check if this Secret already exists
+	found := &corev1.Secret{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
-		err = r.client.Create(context.TODO(), pod)
+		reqLogger.Info("Creating a new Secret", "Secret.Namespace", secret.Namespace, "Secret.Name", secret.Name)
+		err = r.client.Create(context.TODO(), secret)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		// Pod created successfully - don't requeue
-		return reconcile.Result{}, nil
 	} else if err != nil {
+		return reconcile.Result{}, err
+	} else {
+		// Secret already exists - don't requeue
+		reqLogger.Info("Skip reconcile: Secret already exists", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
+	}
+
+	reqLogger.Info("Creating user...")
+
+	minioAdminClient, err := madmin.New(minioURL, minioAccessKey, minioSecretKey, minioSecure)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Pod already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
+	err = minioAdminClient.AddUser(accessKey, secretKey)
+	if err != nil {
+		reqLogger.Error(err, "Can't create user", "AccessKey", accessKey)
+	}
+
 	return reconcile.Result{}, nil
 }
 
 // newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *muminiov1alpha1.MuminioBucket) *corev1.Pod {
+func newSecretForCR(cr *muminiov1alpha1.MuminioBucket, accessKey string, secretKey string) *corev1.Secret {
 	labels := map[string]string{
 		"app": cr.Name,
 	}
-	return &corev1.Pod{
+
+	data := map[string]string{
+		"accessKey": accessKey,
+		"secretKey": secretKey,
+	}
+
+	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
+			Name:      cr.Name + "-secret",
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
-				},
-			},
-		},
+		Type:       "Opaque",
+		StringData: data,
 	}
 }
