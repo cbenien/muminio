@@ -188,7 +188,7 @@ func (r *ReconcileMuminioBucket) Reconcile(request reconcile.Request) (reconcile
 		return reconcile.Result{}, err
 	}
 
-	policy := `{"Version": "2012-10-17","Statement": [{"Action": ["s3:GetObject"],"Effect": "Allow","Resource": ["arn:aws:s3:::BUCKETNAME/*"],"Sid": ""}]}`
+	policy := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::BUCKETNAME/*"]}]}`
 	policy = strings.ReplaceAll(policy, "BUCKETNAME", instance.Name)
 	policyName := "policy-" + instance.Name
 
@@ -222,7 +222,7 @@ func (r *ReconcileMuminioBucket) Reconcile(request reconcile.Request) (reconcile
 
 	// Delete old user if it has changed
 	if accessKey != instance.Status.MinioAccessKey {
-		reqLogger.Info("Removing user", "AccessKey", instance.Status.MinioAccessKey)
+		reqLogger.Info("Removing old user", "AccessKey", instance.Status.MinioAccessKey)
 		err = minioAdminClient.RemoveUser(instance.Status.MinioAccessKey)
 		if err != nil {
 			reqLogger.Error(err, "Unable to remove user", "AccessKey", instance.Status.MinioAccessKey)
@@ -243,7 +243,25 @@ func (r *ReconcileMuminioBucket) Reconcile(request reconcile.Request) (reconcile
 	} else {
 
 		reqLogger.Info("Existing policy", "Policy.Name", policyName, "Policy.Data", string(existingPolicy))
-		//TODO: check that policy is okay
+
+		existingPolicyStr := string(existingPolicy)
+		if policy != existingPolicyStr {
+			reqLogger.Info("Existing policy will be replaced", "ExpectedPolicy", policy, "ActualPolicy", existingPolicyStr)
+
+			reqLogger.Info("Removing policy...", "Policy.Name", policyName)
+			err = minioAdminClient.RemoveCannedPolicy(policyName)
+			if err != nil {
+				reqLogger.Error(err, "Can't remove policy", "Policy.Name", policyName)
+				return reconcile.Result{}, err
+			}
+
+			reqLogger.Info("Creating policy...", "Policy.Name", policyName, "Policy.Data", policy)
+			err = minioAdminClient.AddCannedPolicy(policyName, policy)
+			if err != nil {
+				reqLogger.Error(err, "Can't create policy", "Policy.Name", policyName, "Policy.Data", policy)
+				return reconcile.Result{}, err
+			}
+		}
 	}
 
 	reqLogger.Info("Assigning policy...", "Policy.Name", policyName, "User.Name", accessKey)
