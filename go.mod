@@ -3,7 +3,9 @@ module github.com/cbenien/muminio
 go 1.13
 
 require (
+	github.com/itchyny/base58-go v0.1.0
 	github.com/minio/minio v0.0.0-20191228165443-5d092331158b
+	github.com/minio/minio-go/v6 v6.0.39
 	github.com/operator-framework/operator-sdk v0.13.0
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.0.0

@@ -31,19 +31,18 @@ spec:
         spec:
           description: MuminioBucketSpec defines the desired state of MuminioBucket
           properties:
-            name:
-              maxLength: 63
-              minLength: 8
-              type: string
             secretName:
               maxLength: 63
               minLength: 8
+              pattern: '[A-Z-a-z][A-Za-z0-9-]+'
               type: string
           type: object
         status:
           description: MuminioBucketStatus defines the observed state of MuminioBucket
           properties:
-            minioUrl:
+            minioAccessKey:
+              type: string
+            minioURL:
               description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                 of cluster Important: Run "operator-sdk generate k8s" to regenerate
                 code after modifying this file Add custom validation using kubebuilder

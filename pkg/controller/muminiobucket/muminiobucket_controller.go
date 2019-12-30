@@ -2,10 +2,14 @@ package muminiobucket
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	gerrors "errors"
 	"os"
 	"strings"
 
 	muminiov1alpha1 "github.com/cbenien/muminio/pkg/apis/muminio/v1alpha1"
+	"github.com/minio/minio-go/v6"
 	"github.com/minio/minio/pkg/madmin"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -55,8 +59,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner MuminioBucket
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
+	// Watch for changes to secondary resource Secrets and requeue the owner MuminioBucket
+	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &muminiov1alpha1.MuminioBucket{},
 	})
@@ -76,6 +80,17 @@ type ReconcileMuminioBucket struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
+}
+
+func randomString(len int) string {
+
+	b := make([]byte, len)
+	rand.Read(b)
+
+	encoded := make([]byte, hex.EncodedLen(len))
+	hex.Encode(encoded, b)
+
+	return string(encoded)
 }
 
 // Reconcile reads that state of the cluster for a MuminioBucket object and makes changes based on the state read
@@ -108,8 +123,24 @@ func (r *ReconcileMuminioBucket) Reconcile(request reconcile.Request) (reconcile
 	minioSecretKey := os.Getenv("MINIO_SECRET_KEY")
 	minioSecure := strings.ToLower(os.Getenv("MINIO_SECURE")) == "true"
 
-	accessKey := "newuser"
-	secretKey := "supersecret"
+	// Create bucket
+	minioClient, err := minio.New(minioURL, minioAccessKey, minioSecretKey, minioSecure)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	bucketExists, err := minioClient.BucketExists(instance.Name)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if !bucketExists {
+		reqLogger.Info("Creating bucket", "BucketName", instance.Name)
+		minioClient.MakeBucket(instance.Name, "us-east-1")
+	}
+
+	accessKey := randomString(16)
+	secretKey := randomString(32)
 
 	// Define a new Secret object
 	secret := newSecretForCR(instance, accessKey, secretKey)
@@ -132,20 +163,108 @@ func (r *ReconcileMuminioBucket) Reconcile(request reconcile.Request) (reconcile
 	} else if err != nil {
 		return reconcile.Result{}, err
 	} else {
-		// Secret already exists - don't requeue
-		reqLogger.Info("Skip reconcile: Secret already exists", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
+
+		if _, ok := found.Data["accessKey"]; !ok {
+			err = gerrors.New("Secret does not contain key 'accessKey'")
+			reqLogger.Error(err, err.Error(), "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
+			return reconcile.Result{}, err
+		}
+
+		if _, ok := found.Data["secretKey"]; !ok {
+			err = gerrors.New("Secret does not contain key 'secretKey'")
+			reqLogger.Error(err, err.Error(), "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
+			return reconcile.Result{}, err
+		}
+
+		accessKey = string(found.Data["accessKey"])
+		secretKey = string(found.Data["secretKey"])
+
+		reqLogger.Info("Secret already exists", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name, "AccessKey", accessKey)
 	}
 
-	reqLogger.Info("Creating user...")
-
+	reqLogger.Info("Connecting to Minio admin endpoint...", "Minio.URL", minioURL)
 	minioAdminClient, err := madmin.New(minioURL, minioAccessKey, minioSecretKey, minioSecure)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	err = minioAdminClient.AddUser(accessKey, secretKey)
+	policy := `{"Version": "2012-10-17","Statement": [{"Action": ["s3:GetObject"],"Effect": "Allow","Resource": ["arn:aws:s3:::BUCKETNAME/*"],"Sid": ""}]}`
+	policy = strings.ReplaceAll(policy, "BUCKETNAME", instance.Name)
+	policyName := "policy-" + instance.Name
+
+	// Create or update user
+	existingUser, err := minioAdminClient.GetUserInfo(accessKey)
 	if err != nil {
-		reqLogger.Error(err, "Can't create user", "AccessKey", accessKey)
+		//TODO: parse error - for now: assume user does not exist
+		reqLogger.Info("User not found", "Error", err)
+
+		reqLogger.Info("Creating user...", "User.AccessKey", accessKey)
+		err = minioAdminClient.AddUser(accessKey, secretKey)
+		if err != nil {
+			reqLogger.Error(err, "Can't create user", "User.AccessKey", accessKey)
+			return reconcile.Result{}, err
+		}
+	} else {
+		reqLogger.Info("Existing user", "User.PolicyName", existingUser.PolicyName)
+
+		//TODO: this allows to hijack accounts, e.g. another bucket instance in another namespace can use the same
+		//      accessKey and overwrite the secret
+		//      The only way to fix this is to keep an inventory of all MuminioBucket objects in the cluster
+		if existingUser.SecretKey != secretKey {
+			reqLogger.Info("SecretKey has changed, updating Minio...", "User.AccessKey", accessKey)
+			minioAdminClient.SetUser(accessKey, secretKey, madmin.AccountEnabled)
+			if err != nil {
+				reqLogger.Error(err, "Can't update secret key", "User.AccessKey", accessKey)
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	// Delete old user if it has changed
+	if accessKey != instance.Status.MinioAccessKey {
+		reqLogger.Info("Removing user", "AccessKey", instance.Status.MinioAccessKey)
+		err = minioAdminClient.RemoveUser(instance.Status.MinioAccessKey)
+		if err != nil {
+			reqLogger.Error(err, "Unable to remove user", "AccessKey", instance.Status.MinioAccessKey)
+		}
+	}
+
+	existingPolicy, err := minioAdminClient.InfoCannedPolicy(policyName)
+	if err != nil {
+		reqLogger.Info("Policy doesn't exist", "Policy.Name", policyName)
+
+		reqLogger.Info("Creating policy...", "Policy.Name", policyName, "Policy.Data", policy)
+		err = minioAdminClient.AddCannedPolicy(policyName, policy)
+		if err != nil {
+			reqLogger.Error(err, "Can't create policy", "Policy.Name", policyName, "Policy.Data", policy)
+			return reconcile.Result{}, err
+		}
+
+	} else {
+
+		reqLogger.Info("Existing policy", "Policy.Name", policyName, "Policy.Data", string(existingPolicy))
+		//TODO: check that policy is okay
+	}
+
+	reqLogger.Info("Assigning policy...", "Policy.Name", policyName, "User.Name", accessKey)
+	err = minioAdminClient.SetPolicy(policyName, accessKey, false)
+	if err != nil {
+		reqLogger.Error(err, "Can't assign policy", "Policy.Name", policyName, "User.Name", accessKey)
+		return reconcile.Result{}, err
+	}
+
+	if minioSecure {
+		instance.Status.MinioURL = "https://" + minioURL
+	} else {
+		instance.Status.MinioURL = "http://" + minioURL
+	}
+
+	instance.Status.MinioAccessKey = accessKey
+
+	reqLogger.Info("Updating CRD status")
+	err = r.client.Status().Update(context.TODO(), instance)
+	if err != nil {
+		reqLogger.Error(err, "Unable to update status")
 	}
 
 	return reconcile.Result{}, nil
@@ -164,7 +283,7 @@ func newSecretForCR(cr *muminiov1alpha1.MuminioBucket, accessKey string, secretK
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-secret",
+			Name:      cr.Spec.SecretName,
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
