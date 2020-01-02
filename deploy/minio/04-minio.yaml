@@ -1,0 +1,73 @@
+apiVersion: "etcd.database.coreos.com/v1beta2"
+kind: "EtcdCluster"
+metadata:
+  name: "minio-admin-etcd-cluster"
+  namespace: minio-system
+spec:
+  size: 3
+  version: "3.2.13"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-deployment
+  namespace: minio-system
+  labels:
+    app: minio
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          args: ["gateway", "azure"]
+          env:
+            - name: MINIO_ETCD_ENDPOINTS
+              value: http://minio-admin-etcd-cluster-client:2379/
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-azure-storage-account
+                  key: storageAccountName
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-azure-storage-account
+                  key: storageAccountKey
+          ports:
+            - containerPort: 9000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            periodSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: minio-system
+spec:
+  type: LoadBalancer
+  selector:
+    app: minio
+  ports:
+    - protocol: TCP
+      port: 9000
+      targetPort: 9000
+      name: http
+---

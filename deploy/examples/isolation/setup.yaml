@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: muminio-namespace-1
+---
+apiVersion: muminio.benien.dev/v1alpha1
+kind: MuminioBucket
+metadata:
+  name: bucket1
+  namespace: muminio-namespace-1
+spec:
+  secretName: bucket1-secret
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: bucket1-secret
+  namespace: muminio-namespace-1
+data:
+  accessKey: dXNlcjEyMzQ=
+  secretKey: cGFzc3dvcmQxMjM0
+type: Opaque
+---
