@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: muminio
+  namespace: minio-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: muminio-role
+  namespace: minio-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: muminio-operator-rolebinding
+  namespace: minio-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: muminio-role
+subjects:
+- kind: ServiceAccount
+  name: muminio
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: muminio-clusterrole
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - muminio.benien.dev
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: muminio-operator-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: muminio-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: muminio
+  namespace: minio-system  
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: muminio
+  namespace: minio-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: muminio
+  template:
+    metadata:
+      labels:
+        name: muminio
+    spec:
+      serviceAccountName: muminio
+      containers:
+        - name: muminio
+          # Replace this with the built image name
+          image: keaphyra/muminio-operator
+          command:
+          - muminio
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              value: ""
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "muminio"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-azure-storage-account
+                  key: storageAccountName
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-azure-storage-account
+                  key: storageAccountKey
+            - name: MINIO_URL
+              value: minio.minio-system:9000
+            - name: MINIO_SECURE
+              value: "false"

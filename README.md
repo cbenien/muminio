@@ -18,3 +18,8 @@ Implementation is done via https://github.com/operator-framework/operator-sdk wh
 * Deploy Operator (TODO)
 * Deploy example application (TODO)
 
+## TODO list
+
+* Operator metrics
+* Show failure to connect to minio endpoint (liveness probe?)
+
