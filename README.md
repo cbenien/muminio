@@ -24,7 +24,7 @@ kubectl apply -f deploy/01-namespace.yaml
 There are multiple options to do this, which is kind of the point of the whole project. Applications shouldn't be aware of which Minio mode is deployed (standalone, distributed or gateway). The same application should work on any Minio installation without modifications.
 
 #### Minio Azure Gateway
-First, you have to create a storage account in Azure and then create a Secret that holds the account credentials. Create the following as 03-minio-secret.yaml: 
+First, you have to create a storage account in Azure and then create a Secret that holds the account credentials. Create the following as `03-minio-secret.yaml`: 
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -40,7 +40,7 @@ The above file name is also in the .gitignore file to prevent accidential check-
 
 The Minio Azure gateway needs an etcd cluster to store additional user credentials, which is required by muminio. 
 
-Then, apply the files in the correct order. You have to pause a bit after the etcd operator, because the CRD is only created when the operator is up and running and if the CRD is not there, the deployment of 04-minio.yaml will fail.
+Apply the files in the correct order. You have to pause a bit after the etcd operator, because the CRD is only created when the operator is up and running and if the CRD is not there, the deployment of `04-minio.yaml` will fail.
 
 ```
 kubectl apply -f deploy/minio-azure-gateway/02-etcd-operator.yaml
@@ -65,7 +65,7 @@ kubectl apply -f deploy/minio-distributed/
 ```
 
 ### Deploy Operator
-We have to deploy the custom resource definition and the operator itself:
+Finally, we have to deploy the custom resource definition and the operator itself:
 
 ```
 kubectl apply -f deploy/02-muminio-crd.yaml
@@ -156,43 +156,15 @@ spec:
 Look at the logs of the deployed pods to see if they can successfully read and write to Minio. You can also look at the Minio browser or the Azure Storage browser (if Minio is deployed in gateway mode)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```
 kubectl apply -f deploy/minio-azure-gateway/
 ```
-
-
-
-
-* Deploy CRD
-* Deploy Operator (TODO)
-* Deploy example application (TODO)
 
 ## TODO list
 
 * Operator metrics
 * Show failure to connect to minio endpoint (liveness probe?)
+* Unit tests
+* Release pipeline
+* Kubernetes compatibility
 
