@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: muminio-example-basic
+---
+apiVersion: muminio.benien.dev/v1alpha1
+kind: MuminioBucket
+metadata:
+  name: bucket-basic-example
+  namespace: muminio-example-basic
+spec:
+  secretName: muminio-example-basic-secret
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: muminio-example-basic-secret
+  namespace: muminio-example-basic
+data:
+  accessKey: TUlOSU9fQUNDRVNTX0tFWV8xMjM0NQ==
+  secretKey: NzRlZmZhOGE4ZTliNzQ3NGRlNjA2YTgxODE4M2MxODhkMmJmMTU4Yjg3OTBkNjc4M2QwMmExMDBmNThjODJkMg==
+type: Opaque
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: do-stuff-with-minio
+  namespace: muminio-example-basic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: do-stuff-with-minio
+  template:
+    metadata:
+      labels:
+        name: do-stuff-with-minio
+    spec:
+      containers:
+        - name: muminio
+          image: keaphyra/muminio-basic-example:latest
+          env:
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: muminio-example-basic-secret
+                  key: accessKey
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: muminio-example-basic-secret
+                  key: secretKey
+            - name: MINIO_URL
+              value: minio.minio-system:9000
+            - name: MINIO_SECURE
+              value: "false"
