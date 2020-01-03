@@ -34,13 +34,13 @@ spec:
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio-azure-storage-account
-                  key: storageAccountName
+                  name: minio-master-secret
+                  key: accessKey
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio-azure-storage-account
-                  key: storageAccountKey
+                  name: minio-master-secret
+                  key: secretKey
           ports:
             - containerPort: 9000
               name: http
